@@ -1,0 +1,924 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmartRO POC Simulator Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .dashboard-container { max-width: 1200px; margin: 20px auto; }
+        .kpi-item { transition: transform 0.3s, box-shadow 0.3s; border: 1px solid #e5e7eb; }
+        .kpi-item:hover { transform: translateY(-3px); box-shadow: 0 10px 20px rgba(0, 77, 153, 0.1); }
+        .tag-item { transition: border-left-color 0.5s, background-color 0.3s; border-radius: 8px; }
+        .tag-item.warning { border-left-color: #f59e0b; background-color: #fffbeb; }
+        .tag-item.critical { border-left-color: #ef4444; background-color: #fee2e2; }
+        .tag-item.healthy { border-left-color: #10b981; background-color: #f0fdf4; }
+        .plant-card { transition: all 0.3s; border: 1px solid #e5e7eb; }
+        .plant-card.selected { border: 2px solid #1d4ed8; box-shadow: 0 0 0 3px rgba(29, 78, 216, 0.3); }
+
+        /* P&ID Flow Animation */
+        .flow-path {
+            background: linear-gradient(90deg, #1e3a8a 0%, #3b82f6 50%, #60a5fa 100%);
+            background-size: 200% 100%;
+            animation: flow 2s linear infinite;
+            border-radius: 2px;
+        }
+        .flow-path.fouling {
+            background: repeating-linear-gradient(
+                45deg,
+                #991b1b,
+                #991b1b 10px,
+                #f87171 10px,
+                #f87171 20px
+            );
+            animation: none;
+        }
+        @keyframes flow {
+            0% { background-position: 100% 0; }
+            100% { background-position: -100% 0; }
+        }
+
+        .tab-button {
+            padding: 12px 24px;
+            cursor: pointer;
+            font-weight: 600;
+            border-bottom: 4px solid transparent;
+            transition: all 0.2s;
+            margin-right: 1px;
+            color: #4b5563;
+        }
+        .tab-button.active {
+            color: #1d4ed8;
+            border-bottom: 4px solid #1d4ed8;
+            background-color: #f3f4f6;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 p-4 sm:p-8">
+
+    <div class="dashboard-container bg-white p-8 rounded-2xl shadow-2xl">
+        <h1 class="text-4xl font-extrabold text-blue-800 border-b-4 border-blue-100 pb-4 mb-8 flex items-center">
+            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-3 text-blue-500"><path d="M12 2v2M22 12h-2M4 12H2M15.54 19.387A10 10 0 1 0 12 22M15.54 4.613A10 10 0 1 1 12 2"/></svg>
+            SmartRO Digital Twin Simulator
+        </h1>
+        
+        <!-- Navigation Tabs (Updated to remove Architecture) -->
+        <div id="navigation" class="flex mb-8 border-b border-gray-200">
+            <button onclick="showPage('dashboard', this)" data-page-id="dashboard" class="tab-button active">
+                1. Real-time Dashboard
+            </button>
+            <button onclick="showPage('predictive-page', this)" data-page-id="predictive-page" class="tab-button">
+                2. Predictive Analytics
+            </button>
+            <button onclick="showPage('preventive-page', this)" data-page-id="preventive-page" class="tab-button">
+                3. Financial & Maintenance Planning
+            </button>
+        </div>
+
+        <!-- Global Status and Alerts -->
+        <div class="flex flex-col md:flex-row items-start md:items-center justify-between mb-8 p-4 bg-gray-100 rounded-lg shadow-inner">
+            <p class="text-xl font-semibold text-gray-700 mb-2 md:mb-0 flex items-center">
+                <span class="text-2xl mr-2">🏭</span> Plant Status: <span id="plant-status" class="text-green-600 font-extrabold ml-2">Plant 1 (Demo) - Healthy Operation</span>
+            </p>
+            <div id="alert-display" class="hidden px-4 py-2 bg-red-100 border border-red-400 text-red-700 rounded-lg font-medium w-full md:w-auto shadow-md animate-pulse">
+                🚨 ALERT! Critical event detected.
+            </div>
+            <!-- Global Status Widget (Executive Summary Requirement) -->
+            <div class="text-sm text-gray-500 mt-2 md:mt-0 whitespace-nowrap bg-white p-2 rounded-lg border">
+                Global Fleet: <span class="text-green-600 font-bold">8 Healthy</span> | <span class="text-orange-500 font-bold">1 Warning</span> | <span class="text-red-500 font-bold">1 Critical</span>
+            </div>
+        </div>
+
+        <!-- PAGE 1: REAL-TIME DASHBOARD -->
+        <div id="dashboard" class="page-content">
+            <!-- Fleet Overview - NEW -->
+            <h2 class="text-2xl font-semibold text-gray-800 mb-4 border-b pb-2">
+                Fleet Overview - Interactive Selection
+            </h2>
+            <div id="fleet-overview" class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8 p-4 bg-gray-50 rounded-xl shadow-inner">
+                <!-- Plant 1 - Healthy (Current Demo Plant) -->
+                <div class="plant-card bg-white p-4 rounded-xl shadow border-l-4 border-green-500 cursor-pointer hover:shadow-lg transition selected" onclick="selectPlant(1)">
+                    <div class="font-bold text-gray-800">Plant 1 (Demo)</div>
+                    <div class="text-sm text-gray-600">STP-A (2.5 MLD)</div>
+                    <div class="mt-2 flex items-center">
+                        <span class="h-3 w-3 bg-green-500 rounded-full mr-2"></span>
+                        <span class="text-sm font-semibold text-green-600">Healthy</span>
+                    </div>
+                    <div class="text-xs text-gray-500 mt-1">NPF: 98.5% | RUL: 365+d</div>
+                </div>
+                <!-- Plant 2 - Warning -->
+                <div class="plant-card bg-white p-4 rounded-xl shadow border-l-4 border-yellow-500 cursor-pointer hover:shadow-lg transition" onclick="selectPlant(2)">
+                    <div class="font-bold text-gray-800">Plant 2 (Chakan)</div>
+                    <div class="text-sm text-gray-600">STP-B (1.8 MLD)</div>
+                    <div class="mt-2 flex items-center">
+                        <span class="h-3 w-3 bg-yellow-500 rounded-full mr-2 animate-pulse"></span>
+                        <span class="text-sm font-semibold text-yellow-600">Warning</span>
+                    </div>
+                    <div class="text-xs text-gray-500 mt-1">NPF: 92.1% | RUL: 45d</div>
+                </div>
+                <!-- Plant 3 - Critical -->
+                <div class="plant-card bg-white p-4 rounded-xl shadow border-l-4 border-red-500 cursor-pointer hover:shadow-lg transition" onclick="selectPlant(3)">
+                    <div class="font-bold text-gray-800">Plant 3 (Talegaon)</div>
+                    <div class="text-sm text-gray-600">Industrial RO</div>
+                    <div class="mt-2 flex items-center">
+                        <span class="h-3 w-3 bg-red-500 rounded-full mr-2 animate-pulse"></span>
+                        <span class="text-sm font-semibold text-red-600">Critical</span>
+                    </div>
+                    <div class="text-xs text-gray-500 mt-1">NPF: 87.3% | RUL: 0d</div>
+                </div>
+                <!-- Placeholder for remaining 7 plants -->
+                <div class="plant-card bg-white p-4 rounded-xl shadow border-l-4 border-gray-300 opacity-60 flex flex-col justify-center">
+                    <div class="font-bold text-gray-400">Plant 4-10 (7 Sites)</div>
+                    <div class="text-sm text-gray-400">Mixed Health Status</div>
+                </div>
+            </div>
+            <!-- End Fleet Overview -->
+
+            <!-- Data Export and Reporting - NEW -->
+            <div class="flex justify-end mb-4 space-x-3">
+                <button onclick="exportData('csv')" 
+                        class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg shadow transition flex items-center transform hover:scale-105">
+                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                    </svg>
+                    Export Data (CSV)
+                </button>
+                
+                <button onclick="generateReport('pdf')" 
+                        class="bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded-lg shadow transition flex items-center transform hover:scale-105">
+                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                    </svg>
+                    Generate Report (PDF)
+                </button>
+            </div>
+            <!-- End Data Export -->
+
+            <h2 class="text-2xl font-semibold text-gray-800 mb-4 border-b pb-2">Simulation & Scenario Triggers</h2>
+            <div class="controls flex flex-col md:flex-row flex-wrap gap-4 p-5 bg-orange-50 rounded-xl shadow-md mb-8">
+                <!-- Normalization Control (Scenario D) -->
+                <div class="flex items-center space-x-3 bg-white p-3 rounded-lg shadow-inner flex-grow">
+                    <label for="temp-control" class="font-medium text-gray-700 whitespace-nowrap flex items-center">
+                        <span class="text-xl mr-2">🌡️</span> TIT-01 Water Temp:
+                    </label>
+                    <input type="number" id="temp-control" value="25" min="10" max="35" step="1" onchange="updateSimulation(true)"
+                           class="w-20 p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 text-center">
+                    <span class="text-gray-600">°C</span>
+                </div>
+
+                <!-- Scenario Triggers -->
+                <button onclick="startFoulingSimulation()" id="fouling-btn"
+                        class="flex-grow bg-red-600 hover:bg-red-700 text-white font-semibold py-3 px-4 rounded-lg shadow-lg disabled:opacity-50 transition duration-300 transform hover:scale-105">
+                    Trigger Scaling/Fouling Event
+                </button>
+                <button onclick="triggerPumpFailure()" id="pump-btn"
+                        class="flex-grow bg-yellow-600 hover:bg-yellow-700 text-white font-semibold py-3 px-4 rounded-lg shadow-lg disabled:opacity-50 transition duration-300 transform hover:scale-105">
+                    Trigger Pump Cavitation
+                </button>
+                <button onclick="resetSimulation()"
+                        class="flex-grow bg-gray-700 hover:bg-gray-800 text-white font-semibold py-3 px-4 rounded-lg shadow-lg transition duration-300">
+                    Reset to Healthy
+                </button>
+            </div>
+
+            <!-- KPI Ribbon - Visual Hierarchy Enhancement -->
+            <h2 class="text-2xl font-semibold text-gray-800 mb-4 border-b pb-2">Core Performance Metrics</h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6 mb-8">
+                <!-- COLUMN 1: PREDICIVE FOCUS (Most prominent) -->
+                <div class="lg:col-span-2 grid grid-cols-1 gap-4">
+                    <!-- KPI 3: Normalized Permeate Flow (The AI Key) -->
+                    <div class="kpi-item p-5 rounded-xl shadow-lg bg-green-50">
+                        <div class="text-sm font-semibold text-green-600 flex items-center"><span class="text-xl mr-2">✨</span> NPF (Normalized Permeate Flow)</div>
+                        <div class="text-5xl font-extrabold text-green-700 mt-2" id="kpi-npf">100.0%</div>
+                        <div class="text-xs text-gray-500 mt-1">True membrane health indicator.</div>
+                    </div>
+                    <!-- KPI 4: Predicted RUL -->
+                    <div class="kpi-item p-5 rounded-xl shadow-lg bg-red-50">
+                        <div class="text-sm font-semibold text-red-600 flex items-center"><span class="text-xl mr-2">📅</span> Predicted RUL</div>
+                        <div class="text-4xl font-extrabold text-red-700 mt-2" id="kpi-rul">365+ Days</div>
+                        <div class="text-xs text-gray-500 mt-1">Time until CIP required (-10% efficiency).</div>
+                    </div>
+                </div>
+
+                <!-- COLUMN 2: FINANCIAL/ENERGY FOCUS -->
+                <div class="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-4">
+                    <!-- KPI 5: Specific Energy Consumption -->
+                    <div class="kpi-item p-4 rounded-xl shadow-lg bg-purple-50">
+                        <div class="text-sm font-semibold text-purple-600 flex items-center"><span class="text-xl mr-2">⚡</span> Specific Energy (SEC)</div>
+                        <div class="text-3xl font-bold text-purple-700 mt-1" id="kpi-sec">0.00</div>
+                        <div class="text-xs text-gray-500 mt-1">kWh/m³ (Cost KPI)</div>
+                    </div>
+                    <!-- KPI 6: Chemical Savings -->
+                    <div class="kpi-item p-4 rounded-xl shadow-lg bg-green-100">
+                        <div class="text-sm font-semibold text-green-700 flex items-center"><span class="text-xl mr-2">💰</span> Chemical Savings</div>
+                        <div class="text-3xl font-bold text-green-800 mt-1" id="kpi-savings">$0.00</div>
+                        <div class="text-xs text-gray-500 mt-1">Optimized Dosing (YTD)</div>
+                    </div>
+                    <!-- Calculated NDP -->
+                    <div class="kpi-item p-4 rounded-xl shadow-lg bg-yellow-50 sm:col-span-2">
+                        <div class="text-sm font-semibold text-yellow-700 flex items-center"><span class="text-xl mr-2">📐</span> Calculated NDP</div>
+                        <div class="text-3xl font-bold text-yellow-800 mt-1"><span id="tag-ndp"></span> <span class="text-sm font-normal text-gray-600">Bar</span></div>
+                        <div class="text-xs text-gray-500 mt-1">Net Driving Pressure (Essential for NPF)</div>
+                    </div>
+                </div>
+
+                <!-- COLUMN 3: OPERATIONAL FOCUS -->
+                <div class="lg:col-span-2 grid grid-cols-2 gap-4">
+                    <!-- KPI 1: Recovery Rate -->
+                    <div class="kpi-item p-4 rounded-xl shadow-lg bg-blue-50">
+                        <div class="text-sm font-semibold text-blue-600">Recovery Rate</div>
+                        <div class="text-3xl font-bold text-blue-700 mt-1" id="kpi-recovery">0.0%</div>
+                        <div class="text-xs text-gray-500 mt-1">Production %</div>
+                    </div>
+                    <!-- KPI 2: Salt Rejection Rate -->
+                    <div class="kpi-item p-4 rounded-xl shadow-lg bg-blue-50">
+                        <div class="text-sm font-semibold text-blue-600">Salt Rejection</div>
+                        <div class="text-3xl font-bold text-blue-700 mt-1" id="kpi-rejection">99.0%</div>
+                        <div class="text-xs text-gray-500 mt-1">Quality KPI</div>
+                    </div>
+                </div>
+            </div>
+
+
+            <!-- Plant Digital Twin Visualization (Section 3.1 P&ID Overlay) -->
+            <h2 class="text-2xl font-semibold text-gray-800 mb-4 border-b pb-2">Plant Digital Twin (P&ID Flow View)</h2>
+            <div class="relative bg-gray-100 p-8 rounded-xl shadow-xl border-2 border-gray-200 mb-8 h-48 flex items-center justify-between">
+                
+                <!-- Component 1: Feed -->
+                <div class="text-center w-16">
+                    <div class="font-bold text-gray-700 text-sm">FEED TANK</div>
+                    <div id="flow-in" class="h-2 w-full mt-2 flow-path"></div>
+                </div>
+
+                <!-- Component 2: HP Pump -->
+                <div class="flex flex-col items-center mx-4">
+                    <div id="pump-viz" class="w-12 h-12 rounded-full bg-blue-900 border-4 border-blue-400 flex items-center justify-center font-extrabold text-white text-md shadow-2xl transition duration-500">
+                        PUMP
+                    </div>
+                    <div class="text-xs text-gray-700 mt-2">PIT-02: <span id="tag-pit02-mini">12.5</span> Bar</div>
+                    <div class="text-xs text-gray-700">EM-01: <span id="tag-em01-mini">75.0</span> kW</div>
+                </div>
+
+                <!-- Pipe to RO Vessel -->
+                <div id="flow-to-ro" class="h-2 flex-grow mx-4 flow-path" style="max-width: 150px;"></div>
+                
+                <!-- Component 3: RO Vessel (Membranes) -->
+                <div class="w-48 h-32 bg-white border-4 border-gray-600 rounded-lg relative shadow-xl">
+                    <div class="text-center font-bold text-sm mt-1 text-gray-800">RO VESSEL</div>
+                    <div class="text-xs text-center text-gray-500">Membrane Health: <span id="health-pct" class="font-semibold">100%</span></div>
+                    
+                    <!-- Permeate Line (Output Down) -->
+                    <div id="flow-permeate" class="absolute bottom-0 left-1/4 transform h-12 w-1 flow-path" style="border-radius: 0 0 4px 4px;"></div>
+                    <div class="absolute bottom-1 left-1/4 text-xs text-green-600 font-semibold transform -translate-x-1/2">FIT-01</div>
+                    
+                    <!-- Reject Line (Output Right) -->
+                    <div id="flow-reject" class="absolute top-1/2 right-0 transform -translate-y-1/2 h-2 w-12 flow-path bg-red-800/50" style="animation: none;"></div>
+                    <div class="absolute top-1/2 right-0 text-xs text-red-600 font-semibold transform translate-x-1/2 -translate-y-4">REJECT ($\Delta P$)</div>
+                </div>
+                
+                <!-- Final Permeate Output -->
+                <div id="permeate-output" class="text-center mx-4">
+                    <div id="flow-out" class="h-2 w-16 flow-path"></div>
+                    <div class="font-bold text-green-700 mt-2 text-sm">PERMEATE</div>
+                </div>
+            </div>
+
+            <!-- Simulated Live Tags (Section 4) -->
+            <h2 class="text-2xl font-semibold text-gray-800 mt-8 mb-4 border-b pb-2">Live Sensor Tags (Raw Data Feed)</h2>
+            <div class="data-tags grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+                <!-- RO Feed Pressure (PIT-02) -->
+                <div class="tag-item bg-white p-4 rounded-lg shadow healthy">
+                    <div class="font-bold text-lg text-gray-900 flex items-center"><span class="text-xl mr-2">🔵</span> PIT-02 (Feed P)</div>
+                    <div class="text-3xl mt-1"><span id="tag-pit02">12.5</span> <span class="text-base font-normal text-gray-600">Bar</span></div>
+                </div>
+                <!-- Permeate Flow (FIT-01) -->
+                <div class="tag-item bg-white p-4 rounded-lg shadow healthy">
+                    <div class="font-bold text-lg text-gray-900 flex items-center"><span class="text-xl mr-2">💧</span> FIT-01 (Flow)</div>
+                    <div class="text-3xl mt-1"><span id="tag-fit01">60.0</span> <span class="text-base font-normal text-gray-600">m³/hr</span></div>
+                </div>
+                <!-- Water Temperature (TIT-01) - Critical for Normalization -->
+                <div class="tag-item bg-white p-4 rounded-lg shadow healthy">
+                    <div class="font-bold text-lg text-gray-900 flex items-center"><span class="text-xl mr-2">🌡️</span> TIT-01 (Temp)</div>
+                    <div class="text-3xl mt-1"><span id="tag-tit01">25.0</span> <span class="text-base font-normal text-gray-600">°C</span></div>
+                </div>
+                 <!-- Permeate Conductivity (CIT-02) - Scaling Indicator -->
+                <div class="tag-item bg-white p-4 rounded-lg shadow healthy">
+                    <div class="font-bold text-lg text-gray-900 flex items-center"><span class="text-xl mr-2">⚡</span> CIT-02 (Cond.)</div>
+                    <div class="text-3xl mt-1"><span id="tag-cit02">15</span> <span class="text-base font-normal text-gray-600">µS/cm</span></div>
+                </div>
+                <!-- Pump Power (EM-01) - Pump Health Indicator -->
+                <div class="tag-item bg-white p-4 rounded-lg shadow healthy">
+                    <div class="font-bold text-lg text-gray-900 flex items-center"><span class="text-xl mr-2">🔌</span> EM-01 (Power)</div>
+                    <div class="text-3xl mt-1"><span id="tag-em01">75.0</span> <span class="text-base font-normal text-gray-600">kW</span></div>
+                </div>
+                <!-- RO Reject Differential Pressure (Delta P) -->
+                <div class="tag-item bg-white p-4 rounded-lg shadow healthy">
+                    <div class="font-bold text-lg text-gray-900 flex items-center"><span class="text-xl mr-2">⚙️</span> Delta P ($\Delta P$)</div>
+                    <div class="text-3xl mt-1"><span id="tag-deltap">4.5</span> <span class="text-base font-normal text-gray-600">Bar</span></div>
+                </div>
+            </div>
+
+        </div>
+
+
+        <!-- PAGE 2: PREDICTIVE ANALYTICS (Redesigned) -->
+        <div id="predictive-page" class="page-content hidden">
+            <h2 class="text-2xl font-bold text-gray-800 mb-6 border-b pb-2">Predictive Diagnostics & Anomaly Detection</h2>
+            
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- RUL Widget (Membrane Health Focus) -->
+                <div class="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <!-- RUL Prediction Card -->
+                    <div class="bg-white p-8 rounded-xl shadow-lg border-l-4 border-blue-500">
+                        <h3 class="text-xl font-semibold mb-3 flex items-center text-blue-700">
+                            <span class="text-3xl mr-3">🧪</span> Membrane RUL Prediction
+                        </h3>
+                        <p class="text-5xl font-extrabold text-blue-800" id="rul-summary">365+ Days</p>
+                        <div class="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-300">
+                            <strong class="text-blue-800">Action Recommended:</strong> <span id="rul-action">Monitoring only.</span>
+                        </div>
+                        <div class="mt-4 text-xs text-gray-500">Prediction based on current NPF trend using an exponential decay model.</div>
+                    </div>
+                    
+                    <!-- Pump Health Card -->
+                    <div class="bg-white p-8 rounded-xl shadow-lg border-l-4 border-yellow-500">
+                        <h4 class="text-xl font-semibold mb-3 flex items-center text-yellow-800">
+                            <span class="text-3xl mr-3">🚨</span> HPP Anomaly Detection
+                        </h4>
+                        <p class="text-3xl font-bold text-gray-800">Vibration Index: <span id="vibration-index" class="font-extrabold text-yellow-700">1.0</span></p>
+                        <p class="text-gray-600 mt-2 text-sm" id="pump-health-status">HPP is running normally. No excessive vibration or current spikes detected.</p>
+                        <div class="mt-4 text-xs text-gray-500">
+                            Anomaly detection monitors EM-01 and simulated vibration sensors for bearing wear/cavitation.
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Simulated NPF Trend Chart (Key Visual) -->
+                <div class="bg-white p-8 rounded-xl shadow-lg lg:col-span-1">
+                    <h3 class="text-xl font-semibold mb-4 flex items-center text-green-800">
+                        <span class="text-3xl mr-3">📈</span> Degradation Trend & Drivers
+                    </h3>
+                    <div class="h-40 bg-gray-100 p-2 rounded-lg relative border-2 border-gray-300">
+                        <div class="absolute inset-0 flex items-center justify-center text-base text-gray-500 font-mono">
+                            NPF Trend (Projected Exponential Regression Line)
+                        </div>
+                    </div>
+                    <ul class="text-sm mt-4 space-y-2 p-3 bg-gray-50 rounded-lg">
+                        <li class="flex justify-between"><span>Current NPF:</span> <span class="font-bold text-blue-600" id="current-npf-trend">100.0%</span></li>
+                        <li class="flex justify-between"><span>Degradation Rate (Simulated):</span> <span class="font-bold text-gray-800" id="degradation-rate">0.0% / Day</span></li>
+                        <li class="flex justify-between"><span>Confidence Level:</span> <span class="font-bold text-green-600" id="confidence-level">High</span></li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- PAGE 3: PREVENTIVE MAINTENANCE (Redesigned) -->
+        <div id="preventive-page" class="page-content hidden">
+            <h2 class="text-2xl font-bold text-gray-800 mb-6 border-b pb-2">Financial & Maintenance Planning</h2>
+            
+            <!-- ROI Calculator Section - Streamlined for impact -->
+            <h2 class="text-2xl font-bold text-gray-800 mt-4 mb-6 border-b pb-2">
+                💰 ROI Calculator - Commercial Justification
+            </h2>
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+                <!-- Total Annual Benefit (Prominent) -->
+                <div class="bg-white p-6 rounded-xl shadow-lg border-l-4 border-green-700 lg:col-span-1 flex flex-col justify-center">
+                    <h3 class="text-xl font-semibold mb-2 text-green-700">Total Annual Benefit (Per Plant)</h3>
+                    <p class="text-5xl font-extrabold text-green-700" id="roi-total-benefit">₹30,95,000</p>
+                    <div class="text-sm text-gray-500 mt-2">Cost avoidance realized through prediction and optimization.</div>
+                </div>
+
+                <!-- Payback Period -->
+                <div class="bg-white p-6 rounded-xl shadow-lg border-l-4 border-blue-600">
+                    <h3 class="text-xl font-semibold mb-4 text-blue-700">Simple Payback Period (Fleet)</h3>
+                    <div class="p-4 bg-green-50 rounded-lg border-2 border-green-500">
+                        <div class="text-sm text-gray-600">Projected Time to ROI</div>
+                        <div class="text-5xl font-extrabold text-green-700">8.5 Months</div>
+                    </div>
+                    <div class="text-xs text-gray-500 p-2 bg-gray-50 rounded mt-3">
+                        Total Investment (10 Plants): ₹1.85 Crores
+                    </div>
+                </div>
+                
+                <!-- Maintenance Planning -->
+                <div class="bg-white p-6 rounded-xl shadow-lg border-l-4 border-gray-500">
+                    <h3 class="text-xl font-semibold mb-4 text-gray-700">Uptime & Asset Life KPIs</h3>
+                    <div class="space-y-3">
+                         <div class="flex justify-between items-center">
+                            <span class="text-gray-700">Uptime Improvement Target:</span>
+                            <span class="font-bold text-lg text-blue-600">95% &rightarrow; 99.2%</span>
+                        </div>
+                        <div class="flex justify-between items-center border-t pt-2">
+                            <span class="text-gray-700">Membrane Life Extension:</span>
+                            <span class="font-bold text-lg text-green-600">4 Years &rightarrow; 6 Years</span>
+                        </div>
+                    </div>
+                    <div class="text-xs text-gray-500 mt-3 p-2 bg-gray-50 rounded">
+                        Avoided production loss valued at ₹12,00,000 per plant annually.
+                    </div>
+                </div>
+            </div>
+            <!-- End ROI Calculator -->
+
+
+            <h3 class="text-2xl font-bold text-gray-800 mt-10 mb-6 border-b pb-2">Scheduling & Chemical Dosing Status</h3>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- CIP Scheduling -->
+                <div class="bg-white p-8 rounded-xl shadow-lg border-l-4 border-blue-500">
+                    <h3 class="text-xl font-semibold mb-3 flex items-center text-blue-700">
+                        <span class="text-3xl mr-3">🗓️</span> Next Scheduled CIP
+                    </h3>
+                    <p class="text-3xl font-extrabold text-blue-800" id="next-cip">June 15, 2026</p>
+                    <p class="text-gray-600 mt-2">
+                        CIP date adjusts dynamically based on RUL prediction (pulled forward if NPF drops).
+                    </p>
+                </div>
+                
+                <!-- Chemical Dosing Status -->
+                <div class="bg-white p-8 rounded-xl shadow-lg border-l-4 border-green-500 lg:col-span-2">
+                    <h3 class="text-xl font-semibold mb-3 flex items-center text-green-700">
+                        <span class="text-3xl mr-3">🧪</span> Chemical Dosing Optimization Status
+                    </h3>
+                    <p class="text-gray-800 text-lg font-semibold" id="preventive-action">Standard chemical dosing optimization is active.</p>
+                    <p class="text-gray-600 mt-2">
+                        **YTD Chemical Savings:** <span class="text-green-700 font-bold" id="current-savings-large">$0.00</span>
+                    </p>
+                    <div class="mt-4 text-xs text-gray-500">
+                        Logic actively minimizes anti-scalant usage while maintaining a stable Langelier Saturation Index (LSI) score, avoiding both fouling and chemical waste.
+                    </div>
+                </div>
+            </div>
+        </div>
+
+
+    </div>
+
+    <script>
+        // --- Core Simulation Parameters ---
+        const T_REF_C = 25; 
+        const T_REF_K = T_REF_C + 273.15; 
+        const FAIL_THRESHOLD_NPF = 90; 
+        const INITIAL_FLOW = 60.0;
+        const INITIAL_DELTAP = 4.5;
+        const INITIAL_EM_01 = 75.0; 
+        
+        // NDP Calculation Constants
+        const P_REF_FEED = 12.0;       
+        const P_REF_PERMEATE = 1.0;    
+        const OSMOTIC_DIFF_BAR = 8.0; 
+        const INITIAL_SAVINGS = 2500.00; 
+
+        // Simulation State
+        let currentTempC = T_REF_C;
+        let isFouling = false;
+        let membraneHealth = 100; 
+        let pumpHealth = 100; 
+        let foulingInterval = null;
+        let pumpInterval = null;
+        let currentSavings = 0; 
+        let currentPlant = 1; // Tracks which plant is currently loaded
+        
+        // Data Tags (Initial Values)
+        let tags = {
+            TIT_01: T_REF_C,        
+            FIT_01_raw: INITIAL_FLOW, 
+            PIT_02: P_REF_FEED,     
+            CIT_02: 15,             
+            EM_01: INITIAL_EM_01,            
+            Delta_P: INITIAL_DELTAP,
+            P_permeate: 1.0         
+        };
+
+        // --- Multi-Plant Scenarios (Issue 1) ---
+        const plantScenarios = {
+            1: { name: 'Plant 1 (Demo)', health: 100, deltaP: 4.5, isFouling: false, alert: 'Healthy Operation' },
+            2: { name: 'Plant 2 (Chakan)', health: 92, deltaP: 6.2, isFouling: true, alert: 'Warning' },
+            3: { name: 'Plant 3 (Talegaon)', health: 87, deltaP: 8.5, isFouling: true, alert: 'Critical' }
+        };
+
+        function selectPlant(plantId) {
+            const scenario = plantScenarios[plantId] || plantScenarios[1];
+            
+            // Stop any running intervals
+            clearInterval(foulingInterval);
+            clearInterval(pumpInterval);
+            foulingInterval = null;
+            pumpInterval = null;
+            
+            // Load scenario data
+            currentPlant = plantId;
+            membraneHealth = scenario.health;
+            tags.Delta_P = scenario.deltaP;
+            isFouling = scenario.isFouling;
+            pumpHealth = 100;
+            currentSavings = isFouling ? INITIAL_SAVINGS : 0;
+            
+            // Reset controls UI
+            document.getElementById('fouling-btn').disabled = isFouling;
+            document.getElementById('pump-btn').disabled = false;
+            document.getElementById('fouling-btn').textContent = "Trigger Scaling/Fouling Event";
+            document.getElementById('pump-btn').textContent = "Trigger Pump Cavitation";
+            document.getElementById('temp-control').value = T_REF_C;
+            
+            // Update the visual selection border
+            document.querySelectorAll('.plant-card').forEach(card => {
+                card.classList.remove('selected');
+            });
+            const selected = document.querySelector(`.plant-card[onclick="selectPlant(${plantId})"]`);
+            if (selected) {
+                selected.classList.add('selected');
+            }
+
+            // Immediately run simulation update to display new data
+            updateSimulation();
+            
+            // Smoothly scroll to the simulation controls after selection
+            document.getElementById('navigation').scrollIntoView({behavior: 'smooth'});
+        }
+
+
+        // --- Navigation Logic ---
+
+        function showPage(pageId, clickedButton) {
+            document.querySelectorAll('.page-content').forEach(page => {
+                page.classList.add('hidden');
+            });
+            document.getElementById(pageId).classList.remove('hidden');
+
+            document.querySelectorAll('.tab-button').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            if (clickedButton) {
+                clickedButton.classList.add('active');
+            }
+        }
+
+
+        // --- Calculation Logic (Part 3) ---
+
+        // 1. Temperature Correction Factor (TCF)
+        function calculateTCF(T_act_C) {
+            const T_act_K = T_act_C + 273.15;
+            return Math.exp(2700 * ((1 / T_act_K) - (1 / T_REF_K)));
+        }
+
+        // 2. Net Driving Pressure (NDP)
+        function calculateNDP(P_feed, P_permeate) {
+            const net_operating_pressure = P_feed - P_permeate;
+            const NDP = net_operating_pressure - OSMOTIC_DIFF_BAR;
+            return NDP;
+        }
+
+        // 3. Normalized Permeate Flow (NPF)
+        function calculateNPF(Q_raw, T_act_C, P_feed, P_permeate, health) {
+            const TCF = calculateTCF(T_act_C);
+            
+            const NDP_act = calculateNDP(P_feed, P_permeate);
+            const NDP_ref = calculateNDP(P_REF_FEED, P_REF_PERMEATE);
+            
+            let NDP_factor = (NDP_ref / NDP_act);
+            
+            let Q_normalized = Q_raw * TCF * NDP_factor;
+            
+            let NPF_percent = (Q_normalized / INITIAL_FLOW) * (health / 100);
+
+            return Math.min(100, NPF_percent * 100); 
+        }
+        
+        // 4. Specific Energy Consumption (SEC)
+        function calculateSEC(EM_01_kW, FIT_01_raw_m3hr) {
+            if (FIT_01_raw_m3hr < 5) return 99.9; 
+            return EM_01_kW / FIT_01_raw_m3hr;
+        }
+
+        // 5. Remaining Useful Life (RUL) - EXPONENTIAL MODEL (Issue 4)
+        function calculateRUL(npf) {
+            const preventiveActionElement = document.getElementById('preventive-action');
+
+            if (npf > 99) {
+                if (preventiveActionElement) {
+                    preventiveActionElement.textContent = "SmartRO adjusted Antiscalant flow rate down by 15% due to stable LSI score.";
+                }
+                return { days: "365+", confidence: "High", recommendation: "Monitoring only." };
+            }
+            if (npf < FAIL_THRESHOLD_NPF) {
+                if (preventiveActionElement) {
+                    preventiveActionElement.textContent = "Immediate Chemical Dosing Review - NPF is critical.";
+                }
+                return { days: "0", confidence: "Critical", recommendation: "IMMEDIATE CIP REQUIRED" };
+            }
+
+            // Exponential degradation model: t = -ln(FAIL_THRESHOLD_NPF / NPF) / k
+            const k = 0.001; // Fouling rate constant (day^-1)
+            
+            const t_days = -Math.log(FAIL_THRESHOLD_NPF / npf) / k;
+            const daysRemaining = Math.max(0, Math.round(t_days));
+            
+            let confidence, recommendation;
+            if (daysRemaining < 30) {
+                confidence = "High";
+                recommendation = `CIP window: ${daysRemaining} days. Procurement alert issued.`;
+            } else if (daysRemaining < 90) {
+                confidence = "Medium";
+                recommendation = "Monitor weekly. Schedule CIP in maintenance calendar.";
+            } else {
+                confidence = "Low";
+                recommendation = "Long-term projection. Continue routine monitoring.";
+            }
+            
+            if (preventiveActionElement) {
+                 // Update the specific chemical dosing status field
+                 preventiveActionElement.textContent = recommendation;
+            }
+
+            return {
+                days: daysRemaining,
+                confidence: confidence,
+                recommendation: recommendation
+            };
+        }
+        
+        // --- Simulation Steps ---
+
+        function updateSimulation(isTempChange = false) {
+            // 1. Update Temperature Tag (TIT-01)
+            const tempControl = document.getElementById('temp-control');
+            currentTempC = parseFloat(tempControl.value);
+            tags.TIT_01 = currentTempC;
+            document.getElementById('tag-tit01').textContent = currentTempC.toFixed(1);
+
+            // 2. Adjust Raw Flow (FIT-01) based on Temperature & Health
+            const TCF_current = calculateTCF(currentTempC);
+            let rawFlowAdjustment = INITIAL_FLOW / TCF_current; 
+
+            if (isFouling) {
+                const resistanceFlowDrop = INITIAL_FLOW * (1 - (membraneHealth / 100));
+                tags.FIT_01_raw = rawFlowAdjustment - resistanceFlowDrop;
+                tags.FIT_01_raw = Math.max(10, tags.FIT_01_raw); 
+            } else {
+                tags.FIT_01_raw = rawFlowAdjustment;
+            }
+            
+            document.getElementById('tag-fit01').textContent = tags.FIT_01_raw.toFixed(1);
+            
+            // 3. Calculate and Update KPIs
+            const NDP = calculateNDP(tags.PIT_02, tags.P_permeate);
+            const NPF = calculateNPF(tags.FIT_01_raw, currentTempC, tags.PIT_02, tags.P_permeate, membraneHealth);
+            const SEC = calculateSEC(tags.EM_01, tags.FIT_01_raw); 
+            const rulResult = calculateRUL(NPF);
+
+            // 4. Update Fouling/Pump Tags and Visuals
+            if (isFouling) {
+                tags.Delta_P = INITIAL_DELTAP + (100 - membraneHealth) * 0.1;
+                tags.CIT_02 = 15 + Math.pow( (100 - membraneHealth) / 10, 2);
+                tags.CIT_02 = Math.min(250, tags.CIT_02); 
+                tags.EM_01 = INITIAL_EM_01 + (100 - membraneHealth) * 0.5;
+
+                document.getElementById('tag-deltap').textContent = tags.Delta_P.toFixed(1);
+                document.getElementById('tag-cit02').textContent = Math.round(tags.CIT_02);
+                document.getElementById('tag-em01').textContent = tags.EM_01.toFixed(1);
+                
+                document.getElementById('flow-to-ro').classList.add('fouling');
+                document.getElementById('pump-viz').classList.add('bg-orange-500');
+                document.getElementById('pump-viz').classList.remove('bg-blue-900');
+                document.getElementById('degradation-rate').textContent = '0.5% / Tick';
+
+
+            } else if (!isTempChange) {
+                document.getElementById('tag-deltap').textContent = tags.Delta_P.toFixed(1);
+                document.getElementById('tag-cit02').textContent = 15;
+                tags.EM_01 = INITIAL_EM_01; 
+                document.getElementById('tag-em01').textContent = tags.EM_01.toFixed(1);
+
+                document.getElementById('flow-to-ro').classList.remove('fouling');
+                document.getElementById('pump-viz').classList.remove('bg-orange-500');
+                document.getElementById('pump-viz').classList.add('bg-blue-900');
+                document.getElementById('degradation-rate').textContent = '0.0% / Day';
+            }
+
+            // 5. Update UI Status and Colors
+            const statusElement = document.getElementById('plant-status');
+            const alertBox = document.getElementById('alert-display');
+            const npfElement = document.getElementById('kpi-npf');
+            const rulElement = document.getElementById('kpi-rul');
+            const secElement = document.getElementById('kpi-sec');
+            
+            // Reset classes
+            statusElement.className = '';
+            npfElement.className = 'text-5xl font-extrabold';
+            rulElement.className = 'text-4xl font-extrabold'; // Slightly smaller for confidence text
+            secElement.className = 'text-3xl font-bold';
+            alertBox.classList.add('hidden');
+            document.querySelectorAll('.tag-item').forEach(el => {
+                el.classList.remove('warning', 'critical');
+                el.classList.add('healthy');
+            });
+            
+            // RUL Display Update (Exponential Logic)
+            const daysText = typeof rulResult.days === 'number' ? `${rulResult.days} Days` : rulResult.days;
+            const confidenceColors = {
+                'High': 'text-green-600',
+                'Medium': 'text-yellow-600',
+                'Low': 'text-gray-500',
+                'Critical': 'text-red-600'
+            };
+            const confidenceHTML = `<span class="text-xs ${confidenceColors[rulResult.confidence]} font-bold ml-1">(Confidence: ${rulResult.confidence})</span>`;
+            
+            // Primary KPI Ribbon
+            rulElement.innerHTML = daysText + confidenceHTML;
+            
+            // Predictive Page Updates
+            document.getElementById('rul-summary').textContent = daysText;
+            document.getElementById('rul-action').textContent = rulResult.recommendation;
+            document.getElementById('confidence-level').textContent = rulResult.confidence;
+            document.getElementById('confidence-level').className = `font-bold ${confidenceColors[rulResult.confidence]}`;
+
+
+            // Update all numeric display tags
+            document.getElementById('tag-ndp').textContent = NDP.toFixed(2);
+            document.getElementById('kpi-npf').textContent = NPF.toFixed(1) + "%";
+            document.getElementById('kpi-sec').textContent = SEC.toFixed(2); 
+            document.getElementById('current-npf-trend').textContent = NPF.toFixed(1) + "%"; 
+            document.getElementById('health-pct').textContent = `${Math.round(membraneHealth)}%`;
+            document.getElementById('kpi-savings').textContent = `$${currentSavings.toFixed(2)}`;
+            document.getElementById('current-savings-large').textContent = `$${currentSavings.toFixed(2)}`; // NEW ID
+            document.getElementById('vibration-index').textContent = pumpHealth > 90 ? '1.0 (Baseline)' : (2.5 + (100 - pumpHealth) * 0.1).toFixed(1);
+            document.getElementById('tag-em01-mini').textContent = tags.EM_01.toFixed(1);
+
+            
+            // Apply Conditional Styling
+            if (pumpHealth < 80) {
+                statusElement.textContent = `${plantScenarios[currentPlant].name} - CRITICAL: Pump Failure Imminent`;
+                statusElement.classList.add('text-red-600', 'font-extrabold');
+                alertBox.textContent = "🚨 CRITICAL ALERT: HP Pump Cavitation Detected (Vibration Spike). SHUT DOWN!";
+                alertBox.classList.remove('hidden');
+                document.getElementById('tag-em01').parentElement.classList.remove('healthy');
+                document.getElementById('tag-em01').parentElement.classList.add('critical');
+                document.getElementById('pump-viz').classList.remove('bg-blue-900', 'bg-orange-500');
+                document.getElementById('pump-viz').classList.add('bg-red-600');
+                document.getElementById('pump-health-status').textContent = "CRITICAL: High vibration index detected. IMMEDIATE shutdown required to prevent catastrophic failure.";
+                secElement.classList.remove('text-purple-700');
+                secElement.classList.add('text-red-600');
+
+
+            } else if (NPF < FAIL_THRESHOLD_NPF) {
+                statusElement.textContent = `${plantScenarios[currentPlant].name} - WARNING: Membrane CIP Required`;
+                statusElement.classList.add('text-orange-600', 'font-extrabold');
+                npfElement.classList.remove('text-green-700');
+                npfElement.classList.add('text-red-600');
+                rulElement.classList.add('text-red-600');
+                alertBox.textContent = `⚠️ PREDICTIVE ALERT: NPF ${NPF.toFixed(1)}% | RUL: ${daysText} - Schedule CIP!`;
+                alertBox.classList.remove('hidden');
+
+                document.getElementById('tag-deltap').parentElement.classList.remove('healthy');
+                document.getElementById('tag-deltap').parentElement.classList.add('warning');
+                document.getElementById('tag-cit02').parentElement.classList.remove('healthy');
+                document.getElementById('tag-cit02').parentElement.classList.add('warning');
+                document.getElementById('pump-health-status').textContent = "HPP is stable, but high differential pressure suggests high load.";
+                secElement.classList.remove('text-purple-700');
+                secElement.classList.add('text-orange-600');
+
+
+            } else {
+                statusElement.textContent = `${plantScenarios[currentPlant].name} - Healthy Operation`;
+                statusElement.classList.add('text-green-600', 'font-extrabold');
+                npfElement.classList.remove('text-red-600');
+                npfElement.classList.add('text-green-700');
+                rulElement.classList.remove('text-red-600');
+                rulElement.classList.add('text-green-700');
+                secElement.classList.add('text-purple-700');
+
+                if (!isFouling) {
+                    document.getElementById('pump-viz').classList.remove('bg-red-600', 'bg-orange-500');
+                    document.getElementById('pump-viz').classList.add('bg-blue-900');
+                }
+                 document.getElementById('pump-health-status').textContent = "HPP is running normally. No excessive vibration or current spikes detected.";
+
+            }
+        }
+
+        // --- Demo Control Functions ---
+
+        function startFoulingSimulation() {
+            if (isFouling) return;
+
+            isFouling = true;
+            currentSavings = INITIAL_SAVINGS; 
+            document.getElementById('fouling-btn').disabled = true;
+            document.getElementById('pump-btn').disabled = true;
+
+            foulingInterval = setInterval(() => {
+                if (membraneHealth <= 10) {
+                    clearInterval(foulingInterval);
+                    membraneHealth = 10;
+                    document.getElementById('fouling-btn').textContent = "SIMULATION COMPLETE (MEMBRANE FAILED)";
+                }
+                
+                membraneHealth -= 0.5; 
+                
+                updateSimulation();
+            }, 100); 
+        }
+
+        function triggerPumpFailure() {
+            if (isFouling || pumpInterval) return;
+            
+            document.getElementById('fouling-btn').disabled = true;
+            document.getElementById('pump-btn').disabled = true;
+            document.getElementById('pump-btn').textContent = "PUMP FAILING...";
+
+            pumpHealth = 100;
+
+            pumpInterval = setInterval(() => {
+                if (pumpHealth <= 70) {
+                    clearInterval(pumpInterval);
+                    pumpHealth = 70;
+                }
+
+                tags.EM_01 = INITIAL_EM_01 + 10 * Math.random() + (100 - pumpHealth) * 0.8; 
+                
+                pumpHealth -= 5;
+                
+                updateSimulation();
+            }, 50);
+        }
+
+        function resetSimulation() {
+            clearInterval(foulingInterval);
+            clearInterval(pumpInterval);
+            foulingInterval = null;
+            pumpInterval = null;
+            
+            isFouling = false;
+            membraneHealth = 100;
+            pumpHealth = 100;
+            currentSavings = 0;
+            tags.Delta_P = INITIAL_DELTAP; // Reset delta P tag value
+
+            document.getElementById('fouling-btn').disabled = false;
+            document.getElementById('pump-btn').disabled = false;
+            document.getElementById('fouling-btn').textContent = "Trigger Scaling/Fouling Event";
+            document.getElementById('pump-btn').textContent = "Trigger Pump Cavitation";
+            document.getElementById('temp-control').value = T_REF_C;
+            
+            // Re-run update to set initial healthy state
+            updateSimulation();
+        }
+
+        // --- Data Export Functions (Issue 3) ---
+
+        function exportData(format) {
+            const data = {
+                timestamp: new Date().toISOString(),
+                plant: document.getElementById('plant-status').textContent.split(' - ')[0],
+                npf: document.getElementById('kpi-npf').textContent.split('(')[0].trim(),
+                rul: document.getElementById('kpi-rul').textContent.split('(')[0].trim(),
+                deltap: document.getElementById('tag-deltap').textContent,
+                sec: document.getElementById('kpi-sec').textContent,
+                status: document.getElementById('plant-status').textContent.split(': ')[1] || 'Healthy'
+            };
+            
+            const csvContent = `Timestamp,Plant,NPF (%),RUL (Days),Delta P (Bar),SEC (kWh/m3),Status\n${data.timestamp},${data.plant},${data.npf},${data.rul},${data.deltap},${data.sec},${data.status}`;
+            
+            const blob = new Blob([csvContent], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `SmartRO_Export_${new Date().toISOString().split('T')[0]}.csv`;
+            a.click();
+            
+            alert('✅ Data exported successfully! (In production, this would include historical trends)');
+        }
+
+        function generateReport(format) {
+            alert('📄 Report generation initiated!\n\nIn the full system, this will generate a PDF containing:\n- Executive Summary\n- Fleet Health Status\n- Maintenance Schedule\n- Cost Savings Analysis\n- Compliance Certifications');
+        }
+
+        // Initialize simulation on load
+        window.onload = () => {
+            // Check if a plant is already selected (for scenarios)
+            const plant1Card = document.querySelector(`.plant-card[onclick="selectPlant(1)"]`);
+            if (plant1Card) {
+                plant1Card.classList.add('selected');
+            }
+
+            setInterval(() => {
+                document.getElementById('kpi-rejection').textContent = (99.0 + Math.random() * 0.2 - 0.1).toFixed(1) + "%";
+                document.getElementById('kpi-recovery').textContent = (60.0 + Math.random() * 1.0 - 0.5).toFixed(1) + "%";
+                document.getElementById('tag-pit02-mini').textContent = tags.PIT_02.toFixed(1);
+                
+                if (!isFouling && !pumpInterval) {
+                   updateSimulation();
+                }
+            }, 1000); 
+            
+            resetSimulation(); 
+            showPage('dashboard', document.querySelector('[data-page-id="dashboard"]')); 
+        };
+    </script>
+</body>
+</html>
